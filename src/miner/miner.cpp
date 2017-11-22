@@ -29,12 +29,54 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 /*!
- * \file miner.cpp
+ * \file miner.cpp - Core Worker
  * 
  * \brief Source file that defines miner class.
  */
+#include <sstream>
+#include <numeric>
+#include <boost/asio.hpp>
+#include <boost/array.hpp>
+#include <iostream>
+#include "miner.h"
+#include "common/command_line.h"
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
+#include "crypto/hash-ops.h"
 //----------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
-{
+{ 
+  // argv: blobdata, nonce_from, nonce_to(excluding), difficulty
+  // call: cn_slow_hash to compute the hash and send POW via IPC to Core Manager
+
+  // send via IPC over to Core Manager, to be forwarded to Node Agent and P2P Node
+  rapidjson::Document json;
+  json.SetObject();
+  rapidjson::Value value(rapidjson::kStringType);
+
+  value.SetString("core", sizeof("core"));
+  json.AddMember("obj", value, json.GetAllocator());
+
+  value.SetString("pow", sizeof("pow"));
+  json.AddMember("act", value, json.GetAllocator());
+
+  // Serialize the JSON object
+  rapidjson::StringBuffer buffer;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+  json.Accept(writer);
+
+  boost::asio::io_service ios;
+  boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 3000);
+  boost::asio::ip::tcp::socket socket(ios);
+  socket.connect(endpoint);
+
+  boost::array<char, 10000> buf;
+  std::string stringified = buffer.GetString();
+  std::copy(stringified.begin(), stringified.end(), buf.begin());
+  boost::system::error_code error;
+  socket.write_some(boost::asio::buffer(buf, stringified.size()), error);
+  socket.close();
+		  
   return 0;
 }
