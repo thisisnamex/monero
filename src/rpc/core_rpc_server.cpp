@@ -1022,6 +1022,22 @@ namespace cryptonote
     return true;
   }
   //------------------------------------------------------------------------------------------------------------------------------
+  bool core_rpc_server::on_submitnonce(const COMMAND_RPC_SUBMITNONCE::request& req, COMMAND_RPC_SUBMITNONCE::response& res, epee::json_rpc::error& error_resp)
+  {
+    PERF_TIMER(on_submitnonce);
+    CHECK_CORE_READY();
+	crypto::hash hash;
+	memcpy(hash.data, req.hash.c_str(), crypto::HASH_SIZE);
+    if(!m_core.get_miner().set_mining_pool_nonce(req.template_no, req.nonce, hash))
+    {
+      res.status = "Failed, on_submitnonce: set_mining_pool_nonce";
+      LOG_PRINT_L0(res.status);
+      return true;
+    }
+    res.status = CORE_RPC_STATUS_OK;
+    return true;
+  }
+  //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::on_submitblock(const COMMAND_RPC_SUBMITBLOCK::request& req, COMMAND_RPC_SUBMITBLOCK::response& res, epee::json_rpc::error& error_resp)
   {
     PERF_TIMER(on_submitblock);
