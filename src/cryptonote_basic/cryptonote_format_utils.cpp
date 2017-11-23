@@ -825,6 +825,10 @@ namespace cryptonote
     crypto::hash tree_root_hash = get_tx_tree_hash(b);
     blob.append(reinterpret_cast<const char*>(&tree_root_hash), sizeof(tree_root_hash));
     blob.append(tools::get_varint_data(b.tx_hashes.size()+1));
+    
+    // Dump the blob for developing Core Worker miner
+    cout << "get_block_hashing_blob nonce:" << b.nonce << " blob:" << blob.data << ENDL;
+    
     return blob;
   }
   //---------------------------------------------------------------

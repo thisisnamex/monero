@@ -29,11 +29,10 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 /*!
- * \file simplewallet.h
+ * \file miner.h - Core Worker
  * 
- * \brief Header file that declares simple_wallet class.
+ * \brief Header file for Core Worker
  */
 #pragma once
 
-#include <memory>
 

@@ -27,12 +27,31 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // 
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
+//----------------------------------------------------------------------------------------------------
 
 /*!
  * \file miner.cpp - Core Worker
  * 
- * \brief Source file that defines miner class.
+ * \brief Source file that defines Core Worker.
  */
+
+/* Core Worker sends these two API to Core Manager to be forwarded to Server
+  
+  // Send nounce for each POW solution found
+  {
+    obj: core
+    act: pow
+    template: template number of this POW
+    nonce: nonce for the solution
+  }
+  
+  // Send notification when done searching through all the nonces
+  {
+    obj: core
+    act: done
+  }
+*/
+ 
 #include <sstream>
 #include <numeric>
 #include <boost/asio.hpp>
@@ -44,22 +63,119 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "crypto/hash-ops.h"
+#include "cryptonote_basic/difficulty.h"
 //----------------------------------------------------------------------------------------------------
+
+#define CORE_MANAGER_IP "127.0.0.1"
+#define CORE_MANAGER_PORT 3000
+
+#define DEBUG_MINER true
+#define DEBUG_MINER_PRINT true
+
 int main(int argc, char* argv[])
 { 
-  // argv: blobdata, nonce_from, nonce_to(excluding), difficulty
+  // argv: template_no, nonce_from, nonce_to(excluding), difficulty, blobdata
   // call: cn_slow_hash to compute the hash and send POW via IPC to Core Manager
+  uint32_t template_no = boost::lexical_cast<uint32_t>(args[0]);
+  uint32_t nonce_from = boost::lexical_cast<uint32_t>(args[1]);
+  uint32_t nonce_to = boost::lexical_cast<uint32_t>(args[2]);
+  uint64_t difficulty = boost::lexical_cast<uint64_t>(args[3]);
+  
+  // blob is a result of get_block_hashing_blob(const block& b) call as defined in 
+  // cryptonote_basic/cryptonote_format_utils.cpp
+  // blob is std::string
+  /* struct block_header is defined in cryptonote_basic/cryptonote_basic.h
+  struct block_header
+  {
+    uint8_t major_version;
+    uint8_t minor_version;
+    uint64_t timestamp;
+    crypto::hash  prev_id;
+    uint32_t nonce;
 
-  // send via IPC over to Core Manager, to be forwarded to Node Agent and P2P Node
+    BEGIN_SERIALIZE()
+      VARINT_FIELD(major_version)
+      VARINT_FIELD(minor_version)
+      VARINT_FIELD(timestamp)
+      FIELD(prev_id)
+      FIELD(nonce)
+    END_SERIALIZE()
+  };*/
+
+  if (sizeof(args[4]) >= 512)
+  {
+    cout << "Fatal, malformed blob received!" << ENDL;
+    return 0;
+  }
+  memcpy(blob, args[4], sizeof(args[4]));
+  
+  crypto::hash hash_result;
+  
+  for (uint32_t nonce = nonce_from; nonce < nonce_to; nonce++)
+  {
+    // Set nounce in blob
+    if (DEBUG_MINER_PRINT)
+    {
+      cout << "Testing blob:" << blob << ENDL;
+    }
+    
+    crypto::cn_slow_hash(blob, sizeof(blob), hash_result);
+    
+    if(check_hash(hash_result, difficulty))
+    {
+      cout << "Found nonce:" << nonce << " hash:" << hash_result << ENDL;
+      
+      if (DEBUG_MINER) continue;
+      
+      // Send POW via IPC over to Core Manager, to be forwarded to Node Agent and P2P Node
+      rapidjson::Document json;
+      json.SetObject();
+      rapidjson::Value value_str(rapidjson::kStringType);
+      rapidjson::Value value_num(rapidjson::kNumberType);
+      
+      value_str.SetString("core", sizeof("core"));
+      json.AddMember("obj", value_str, json.GetAllocator());
+    
+      value_str.SetString("pow", sizeof("pow"));
+      json.AddMember("act", value_str, json.GetAllocator());
+
+      value_num.SetInt(template_no);
+      json.AddMember("template", value_num, json.GetAllocator());
+
+      value_num.SetInt(nonce);
+      json.AddMember("nonce", value_num, json.GetAllocator());
+    
+      // Serialize the JSON object
+      rapidjson::StringBuffer buffer;
+      rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+      json.Accept(writer);
+    
+      boost::asio::io_service ios;
+      boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string(CORE_MANAGER_IP), CORE_MANAGER_PORT);
+      boost::asio::ip::tcp::socket socket(ios);
+      socket.connect(endpoint);
+    
+      boost::array<char, 1000> buf;
+      std::string stringified = buffer.GetString();
+      std::copy(stringified.begin(), stringified.end(), buf.begin());
+      boost::system::error_code error;
+      socket.write_some(boost::asio::buffer(buf, stringified.size()), error);
+      socket.close();
+    }  
+  }
+  
+  if (DEBUG_MINER) return 0;
+  
+  // Before quit, send notification to Core Manager
   rapidjson::Document json;
   json.SetObject();
-  rapidjson::Value value(rapidjson::kStringType);
+  rapidjson::Value value_str(rapidjson::kStringType);
+  
+  value_str.SetString("core", sizeof("core"));
+  json.AddMember("obj", value_str, json.GetAllocator());
 
-  value.SetString("core", sizeof("core"));
-  json.AddMember("obj", value, json.GetAllocator());
-
-  value.SetString("pow", sizeof("pow"));
-  json.AddMember("act", value, json.GetAllocator());
+  value_str.SetString("done", sizeof("done"));
+  json.AddMember("act", value_str, json.GetAllocator());
 
   // Serialize the JSON object
   rapidjson::StringBuffer buffer;
@@ -67,16 +183,16 @@ int main(int argc, char* argv[])
   json.Accept(writer);
 
   boost::asio::io_service ios;
-  boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 3000);
+  boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string(CORE_MANAGER_IP), CORE_MANAGER_PORT);
   boost::asio::ip::tcp::socket socket(ios);
   socket.connect(endpoint);
 
-  boost::array<char, 10000> buf;
+  boost::array<char, 1000> buf;
   std::string stringified = buffer.GetString();
   std::copy(stringified.begin(), stringified.end(), buf.begin());
   boost::system::error_code error;
   socket.write_some(boost::asio::buffer(buf, stringified.size()), error);
   socket.close();
-		  
+
   return 0;
 }
