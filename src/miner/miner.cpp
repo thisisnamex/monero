@@ -57,13 +57,18 @@
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
 #include <iostream>
+#include <ctype.h>
+
 #include "miner.h"
 #include "common/command_line.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "crypto/hash-ops.h"
 #include "cryptonote_basic/difficulty.h"
+#include "string_coding.h"
+
+using namespace epee;
+
 //----------------------------------------------------------------------------------------------------
 
 #define CORE_MANAGER_IP "127.0.0.1"
@@ -72,58 +77,54 @@
 #define DEBUG_MINER true
 #define DEBUG_MINER_PRINT true
 
+void hexdump(void *pAddressIn, long  lSize);
+void blob_set_nonce(char *blob, uint32_t nonce);
+
 int main(int argc, char* argv[])
 { 
   // argv: template_no, nonce_from, nonce_to(excluding), difficulty, blobdata
   // call: cn_slow_hash to compute the hash and send POW via IPC to Core Manager
-  uint32_t template_no = boost::lexical_cast<uint32_t>(args[0]);
-  uint32_t nonce_from = boost::lexical_cast<uint32_t>(args[1]);
-  uint32_t nonce_to = boost::lexical_cast<uint32_t>(args[2]);
-  uint64_t difficulty = boost::lexical_cast<uint64_t>(args[3]);
+  uint32_t template_no = boost::lexical_cast<uint32_t>(argv[1]);
+  uint32_t nonce_from = boost::lexical_cast<uint32_t>(argv[2]);
+  uint32_t nonce_to = boost::lexical_cast<uint32_t>(argv[3]);
+  uint64_t difficulty = boost::lexical_cast<uint64_t>(argv[4]);
   
   // blob is a result of get_block_hashing_blob(const block& b) call as defined in 
   // cryptonote_basic/cryptonote_format_utils.cpp
   // blob is std::string
-  /* struct block_header is defined in cryptonote_basic/cryptonote_basic.h
-  struct block_header
+  
+  if (sizeof(argv[5]) >= 512)
   {
-    uint8_t major_version;
-    uint8_t minor_version;
-    uint64_t timestamp;
-    crypto::hash  prev_id;
-    uint32_t nonce;
-
-    BEGIN_SERIALIZE()
-      VARINT_FIELD(major_version)
-      VARINT_FIELD(minor_version)
-      VARINT_FIELD(timestamp)
-      FIELD(prev_id)
-      FIELD(nonce)
-    END_SERIALIZE()
-  };*/
-
-  if (sizeof(args[4]) >= 512)
-  {
-    cout << "Fatal, malformed blob received!" << ENDL;
+    std::cout << "Fatal, malformed blob received!" << ENDL;
     return 0;
   }
-  memcpy(blob, args[4], sizeof(args[4]));
+  
+  char blob[512];
+  std::string blob_bin = string_encoding::base64_decode(argv[5]);
+  memcpy(blob, blob_bin.c_str(), blob_bin.length());
+  
+  // hex dump the binary blob
+  std::cout << "hexdump of blob input:" << ENDL;
+  hexdump(blob, blob_bin.length());
   
   crypto::hash hash_result;
   
   for (uint32_t nonce = nonce_from; nonce < nonce_to; nonce++)
   {
     // Set nounce in blob
+	blob_set_nonce(blob, nonce);
+	
     if (DEBUG_MINER_PRINT)
     {
-      cout << "Testing blob:" << blob << ENDL;
+      std::cout << "Testing blob:" << ENDL;
+      hexdump(blob, blob_bin.length());
     }
     
     crypto::cn_slow_hash(blob, sizeof(blob), hash_result);
     
-    if(check_hash(hash_result, difficulty))
+    if(cryptonote::check_hash(hash_result, difficulty))
     {
-      cout << "Found nonce:" << nonce << " hash:" << hash_result << ENDL;
+      std::cout << "Found nonce:" << nonce << " hash:" << hash_result << ENDL;
       
       if (DEBUG_MINER) continue;
       
@@ -195,4 +196,88 @@ int main(int argc, char* argv[])
   socket.close();
 
   return 0;
+}
+
+//----------------------------------------------------------------------------------------------------
+void blob_set_nonce(char *blob, uint32_t nonce)
+{
+  /* struct block_header is defined in cryptonote_basic/cryptonote_basic.h
+  struct block_header
+  {
+    uint8_t major_version;
+    uint8_t minor_version;
+    uint64_t timestamp;
+    crypto::hash  prev_id;
+    uint32_t nonce;
+
+    BEGIN_SERIALIZE()
+      VARINT_FIELD(major_version)
+      VARINT_FIELD(minor_version)
+      VARINT_FIELD(timestamp)
+      FIELD(prev_id)
+      FIELD(nonce)
+    END_SERIALIZE()
+  };*/
+
+  // Sample blobs:
+  // get_block_hashing_blob nonce:3161993101 blob:Bgap3NvQBYX3w3mmJ4W9Ud2vg8SXMWn5hT5w2MO9Ui/SVLJX+2CtjS94vCqYs/yYBZtUbgFbnZDc4H2PNMSo8vX6whrCAJkuWEhsAg==
+  // get_block_hashing_blob nonce:3161993102 blob:Bgap3NvQBYX3w3mmJ4W9Ud2vg8SXMWn5hT5w2MO9Ui/SVLJX+2Ctji94vCqYs/yYBZtUbgFbnZDc4H2PNMSo8vX6whrCAJkuWEhsAg==
+  
+  blob[39] =	   (nonce) & 0x00FF;
+  blob[40] =  (nonce >> 8) & 0x00FF;
+  blob[41] = (nonce >> 16) & 0x00FF;
+  blob[42] = (nonce >> 24) & 0x00FF;
+}
+
+void hexdump(void *pAddressIn, long  lSize)
+{
+ char szBuf[100];
+ long lIndent = 1;
+ long lOutLen, lIndex, lIndex2, lOutLen2;
+ long lRelPos;
+ struct { char *pData; unsigned long lSize; } buf;
+ unsigned char *pTmp,ucTmp;
+ unsigned char *pAddress = (unsigned char *)pAddressIn;
+
+   buf.pData   = (char *)pAddress;
+   buf.lSize   = lSize;
+
+   while (buf.lSize > 0)
+   {
+      pTmp     = (unsigned char *)buf.pData;
+      lOutLen  = (int)buf.lSize;
+      if (lOutLen > 16)
+          lOutLen = 16;
+
+      // create a 64-character formatted output line:
+      sprintf(szBuf, " >                            "
+                     "                      "
+                     "    %08lX", pTmp-pAddress);
+      lOutLen2 = lOutLen;
+
+      for(lIndex = 1+lIndent, lIndex2 = 53-15+lIndent, lRelPos = 0;
+          lOutLen2;
+          lOutLen2--, lIndex += 2, lIndex2++
+         )
+      {
+         ucTmp = *pTmp++;
+
+         sprintf(szBuf + lIndex, "%02X ", (unsigned short)ucTmp);
+         if(!isprint(ucTmp))  ucTmp = '.'; // nonprintable char
+         szBuf[lIndex2] = ucTmp;
+
+         if (!(++lRelPos & 3))     // extra blank after 4 bytes
+         {  lIndex++; szBuf[lIndex+2] = ' '; }
+      }
+
+      if (!(lRelPos & 3)) lIndex--;
+
+      szBuf[lIndex  ]   = '<';
+      szBuf[lIndex+1]   = ' ';
+
+      printf("%s\n", szBuf);
+
+      buf.pData   += lOutLen;
+      buf.lSize   -= lOutLen;
+   }
 }

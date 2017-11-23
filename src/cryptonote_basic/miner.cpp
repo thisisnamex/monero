@@ -98,7 +98,7 @@ namespace cryptonote
     m_do_mining(false),
     m_current_hash_rate(0),
     m_is_background_mining_enabled(false),
-	m_is_mining_pool_enabled(true),
+	m_is_mining_pool_enabled(false),
     m_min_idle_seconds(BACKGROUND_MINING_DEFAULT_MIN_IDLE_INTERVAL_IN_SECONDS),
     m_idle_threshold(BACKGROUND_MINING_DEFAULT_IDLE_THRESHOLD_PERCENTAGE),
     m_mining_target(BACKGROUND_MINING_DEFAULT_MINING_TARGET_PERCENTAGE),
@@ -463,6 +463,9 @@ namespace cryptonote
         CRITICAL_REGION_END();
         local_template_ver = m_template_no;
         nonce = m_starter_nonce + th_local_index;
+		
+		// Resend the blob to mining pool
+		m_mining_pool_block_hashing_blob = "";
       }
 
       if(!local_template_ver)//no any set_block_template call
@@ -482,6 +485,8 @@ namespace cryptonote
 		  b.nonce = 0;
 		  m_mining_pool_block_hashing_blob = get_block_hashing_blob(b);
 		  m_mining_pool_hash.data[0] = 0;
+		  
+		  std::cout << "Send blob:" << m_mining_pool_block_hashing_blob << ENDL;
 		  
 		  // send via IPC over to Node Agent
           rapidjson::Document json;
@@ -528,6 +533,10 @@ namespace cryptonote
 	  {
 	    // Normal mining flow
         b.nonce = nonce;
+		
+		m_mining_pool_block_hashing_blob = get_block_hashing_blob(b);
+		std::cout << "Solo mining, nonce:" << nonce << " blob:" << string_encoding::base64_encode((unsigned char*)m_mining_pool_block_hashing_blob.c_str(), m_mining_pool_block_hashing_blob.length()) << ENDL;
+		
         get_block_longhash(b, h, height);
       }
 	  
