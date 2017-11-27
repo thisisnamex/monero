@@ -75,7 +75,6 @@ using namespace epee;
 #define CORE_MANAGER_PORT 3000
 
 #define DEBUG_MINER true
-#define DEBUG_MINER_PRINT true
 
 void hexdump(void *pAddressIn, long  lSize);
 void blob_set_nonce(char *blob, uint32_t nonce);
@@ -95,7 +94,7 @@ int main(int argc, char* argv[])
   
   if (sizeof(argv[5]) >= 512)
   {
-    std::cout << "Fatal, malformed blob received!" << ENDL;
+    std::cerr << "Fatal, malformed blob received!" << ENDL;
     return 0;
   }
   
@@ -104,7 +103,7 @@ int main(int argc, char* argv[])
   memcpy(blob, blob_bin.c_str(), blob_bin.length());
   
   // hex dump the binary blob
-  std::cout << "hexdump of blob input:" << ENDL;
+  std::cerr << "hexdump of blob input:" << ENDL;
   hexdump(blob, blob_bin.length());
   
   crypto::hash hash_result;
@@ -114,9 +113,9 @@ int main(int argc, char* argv[])
     // Set nounce in blob
 	blob_set_nonce(blob, nonce);
 	
-    if (DEBUG_MINER_PRINT)
+    if (DEBUG_MINER)
     {
-      std::cout << "Testing blob:" << ENDL;
+      std::cerr << "Testing blob:" << ENDL;
       hexdump(blob, blob_bin.length());
     }
     
@@ -124,9 +123,12 @@ int main(int argc, char* argv[])
     
     if(cryptonote::check_hash(hash_result, difficulty))
     {
-      std::cout << "Found nonce:" << nonce << " hash:" << hash_result << ENDL;
+      std::cerr << "Found nonce:" << nonce << " hash:" << hash_result << ENDL;
       
-      if (DEBUG_MINER) continue;
+      if (DEBUG_MINER) {
+	    std::cout << nonce << ENDL;
+	    continue;
+	  }
       
       // Send POW via IPC over to Core Manager, to be forwarded to Node Agent and P2P Node
       rapidjson::Document json;
@@ -275,7 +277,7 @@ void hexdump(void *pAddressIn, long  lSize)
       szBuf[lIndex  ]   = '<';
       szBuf[lIndex+1]   = ' ';
 
-      printf("%s\n", szBuf);
+      fprintf(stderr, "%s\n", szBuf);
 
       buf.pData   += lOutLen;
       buf.lSize   -= lOutLen;
