@@ -37,7 +37,7 @@
 
 /* Core Worker sends these two API to Core Manager to be forwarded to Server
   
-  // Send nounce for each POW solution found
+  // Send nounce for each solution found
   {
     obj: core
     act: pow
@@ -49,6 +49,7 @@
   {
     obj: core
     act: done
+	nonce_from: 
   }
 */
  
@@ -102,11 +103,15 @@ int main(int argc, char* argv[])
   std::string blob_bin = string_encoding::base64_decode(argv[5]);
   memcpy(blob, blob_bin.c_str(), blob_bin.length());
   
-  // hex dump the binary blob
-  std::cerr << "hexdump of blob input:" << ENDL;
-  hexdump(blob, blob_bin.length());
+  if (DEBUG_MINER)
+  {
+    // hex dump the binary blob
+    std::cerr << "hexdump of blob input:" << ENDL;
+    hexdump(blob, blob_bin.length());
+  }
   
   crypto::hash hash_result;
+  int blob_length = strlen(blob);
   
   for (uint32_t nonce = nonce_from; nonce < nonce_to; nonce++)
   {
@@ -119,11 +124,20 @@ int main(int argc, char* argv[])
       hexdump(blob, blob_bin.length());
     }
     
-    crypto::cn_slow_hash(blob, sizeof(blob), hash_result);
-    
-    if(cryptonote::check_hash(hash_result, difficulty))
+    crypto::cn_slow_hash(blob, blob_length, hash_result);
+		
+    if (DEBUG_MINER)
     {
-      std::cerr << "Found nonce:" << nonce << " hash:" << hash_result << ENDL;
+      std::cerr << "hash_result:" << ENDL;
+	  hexdump(hash_result.data, 32);
+    }
+	
+	if(cryptonote::check_hash(hash_result, difficulty))
+    {
+      if (DEBUG_MINER)
+      {
+        std::cerr << "Found nonce:" << nonce << " hash:" << hash_result << ENDL;
+      }
       
       if (DEBUG_MINER) {
 	    std::cout << nonce << ENDL;
@@ -167,18 +181,24 @@ int main(int argc, char* argv[])
     }  
   }
   
-  if (DEBUG_MINER) return 0;
+  if (DEBUG_MINER) {
+  	return 0;
+  }
   
   // Before quit, send notification to Core Manager
   rapidjson::Document json;
   json.SetObject();
   rapidjson::Value value_str(rapidjson::kStringType);
+  rapidjson::Value value_num(rapidjson::kNumberType);
   
   value_str.SetString("core", sizeof("core"));
   json.AddMember("obj", value_str, json.GetAllocator());
 
   value_str.SetString("done", sizeof("done"));
   json.AddMember("act", value_str, json.GetAllocator());
+  
+  value_num.SetInt(nonce_from);
+  json.AddMember("nonce_from", value_num, json.GetAllocator());
 
   // Serialize the JSON object
   rapidjson::StringBuffer buffer;
