@@ -292,6 +292,19 @@ namespace tools
       std::vector<cryptonote::tx_destination_entry> dests; // original setup, does not include change
       uint32_t subaddr_account;   // subaddress account of your wallet to be used in this transfer
       std::set<uint32_t> subaddr_indices;  // set of address indices used as inputs in this transfer
+
+      BEGIN_SERIALIZE_OBJECT()
+        FIELD(sources)
+        FIELD(change_dts)
+        FIELD(splitted_dsts)
+        FIELD(selected_transfers)
+        FIELD(extra)
+        FIELD(unlock_time)
+        FIELD(use_rct)
+        FIELD(dests)
+        FIELD(subaddr_account)
+        FIELD(subaddr_indices)
+      END_SERIALIZE()
     };
 
     typedef std::vector<transfer_details> transfer_container;
@@ -313,6 +326,20 @@ namespace tools
       std::vector<cryptonote::tx_destination_entry> dests;
 
       tx_construction_data construction_data;
+
+      BEGIN_SERIALIZE_OBJECT()
+        FIELD(tx)
+        FIELD(dust)
+        FIELD(fee)
+        FIELD(dust_added_to_fee)
+        FIELD(change_dts)
+        FIELD(selected_transfers)
+        FIELD(key_images)
+        FIELD(tx_key)
+        FIELD(additional_tx_keys)
+        FIELD(dests)
+        FIELD(construction_data)
+      END_SERIALIZE()
     };
 
     // The term "Unsigned tx" is not really a tx since it's not signed yet.
@@ -684,7 +711,13 @@ namespace tools
     uint32_t get_confirm_backlog_threshold() const { return m_confirm_backlog_threshold; };
 
     bool get_tx_key(const crypto::hash &txid, crypto::secret_key &tx_key, std::vector<crypto::secret_key> &additional_tx_keys) const;
+    void check_tx_key(const crypto::hash &txid, const crypto::secret_key &tx_key, const std::vector<crypto::secret_key> &additional_tx_keys, const cryptonote::account_public_address &address, uint64_t &received, bool &in_pool, uint64_t &confirmations);
+    void check_tx_key_helper(const crypto::hash &txid, const crypto::key_derivation &derivation, const std::vector<crypto::key_derivation> &additional_derivations, const cryptonote::account_public_address &address, uint64_t &received, bool &in_pool, uint64_t &confirmations);
+    std::string get_tx_proof(const crypto::hash &txid, const cryptonote::account_public_address &address, bool is_subaddress, const std::string &message);
+    bool check_tx_proof(const crypto::hash &txid, const cryptonote::account_public_address &address, bool is_subaddress, const std::string &message, const std::string &sig_str, uint64_t &received, bool &in_pool, uint64_t &confirmations);
 
+    std::string get_spend_proof(const crypto::hash &txid, const std::string &message);
+    bool check_spend_proof(const crypto::hash &txid, const std::string &message, const std::string &sig_str);
    /*!
     * \brief GUI Address book get/store
     */

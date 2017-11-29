@@ -29,7 +29,7 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 
-#include "wallet/wallet2_api.h"
+#include "wallet/api/wallet2_api.h"
 #include <string>
 
 namespace Monero {
@@ -55,7 +55,6 @@ public:
     std::string errorString() const;
     void setDaemonAddress(const std::string &address);
     bool connected(uint32_t *version = NULL) const;
-    bool checkPayment(const std::string &address, const std::string &txid, const std::string &txkey, const std::string &daemon_address, uint64_t &received, uint64_t &height, std::string &error) const;
     uint64_t blockchainHeight() const;
     uint64_t blockchainTargetHeight() const;
     uint64_t networkDifficulty() const;
