@@ -1026,9 +1026,7 @@ namespace cryptonote
   {
     PERF_TIMER(on_submitnonce);
     CHECK_CORE_READY();
-	crypto::hash hash;
-	memcpy(hash.data, req.hash.c_str(), crypto::HASH_SIZE);
-    if(!m_core.get_miner().set_mining_pool_nonce(req.template_no, req.nonce, hash))
+    if(!m_core.get_miner().set_mining_pool_nonce(req.template_no, req.nonce))
     {
       res.status = "Failed, on_submitnonce: set_mining_pool_nonce";
       LOG_PRINT_L0(res.status);

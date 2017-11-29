@@ -413,12 +413,13 @@ namespace cryptonote
       MDEBUG("MINING RESUMED");
   }
   //-----------------------------------------------------------------------------------------------------
-  bool miner::set_mining_pool_nonce(uint32_t template_no, uint32_t nonce, crypto::hash hash)
+  bool miner::set_mining_pool_nonce(uint32_t template_no, uint32_t nonce)
   {
     CRITICAL_REGION_LOCAL(m_mining_pool_nonce_lock);
-	m_mining_pool_hash = hash;
 	m_mining_pool_nonce = nonce;
 	m_mining_pool_template_no = template_no;
+	
+	m_mining_pool_found_nonce = 1;
 	return true;
   }
   //-----------------------------------------------------------------------------------------------------
@@ -484,23 +485,33 @@ namespace cryptonote
 		  // create blob for mining pool
 		  b.nonce = 0;
 		  m_mining_pool_block_hashing_blob = get_block_hashing_blob(b);
-		  m_mining_pool_hash.data[0] = 0;
+		  m_mining_pool_found_nonce = 0;
 		  
 		  std::cout << "Send blob:" << m_mining_pool_block_hashing_blob << ENDL;
 		  
 		  // send via IPC over to Node Agent
           rapidjson::Document json;
 		  json.SetObject();
-		  rapidjson::Value value(rapidjson::kStringType);
+		  rapidjson::Value value_str(rapidjson::kStringType);
+      	  rapidjson::Value value_num(rapidjson::kNumberType);
 		  
-		  value.SetString("node", sizeof("node"));
-		  json.AddMember("obj", value, json.GetAllocator());
+		  value_str.SetString("node", sizeof("node"));
+		  json.AddMember("obj", value_str, json.GetAllocator());
 		  
-		  value.SetString("new_template", sizeof("new_template"));
-		  json.AddMember("act", value, json.GetAllocator());
+		  value_str.SetString("new_template", sizeof("new_template"));
+		  json.AddMember("act", value_str, json.GetAllocator());
 		  
-		  value.SetString(m_mining_pool_block_hashing_blob.c_str(), m_mining_pool_block_hashing_blob.length());
-		  json.AddMember("blob", value, json.GetAllocator());
+          value_str.SetString("monero", sizeof("monero"));
+          json.AddMember("cc", value_str, json.GetAllocator());
+
+          value_num.SetInt(template_no);
+          json.AddMember("template", value_num, json.GetAllocator());
+	  
+          value_num.SetInt(local_diff);
+          json.AddMember("difficulty", value_num, json.GetAllocator());
+		  
+		  value_str.SetString(m_mining_pool_block_hashing_blob.c_str(), m_mining_pool_block_hashing_blob.length());
+		  json.AddMember("blob", value_str, json.GetAllocator());
 		  
           // Serialize the JSON object
           rapidjson::StringBuffer buffer;
@@ -519,26 +530,31 @@ namespace cryptonote
 	  	  socket.write_some(boost::asio::buffer(buf, stringified.size()), error);
 	      socket.close();
 		  
-		}else if (m_mining_pool_hash.data[0] != 0)
+          continue; // loop m_is_mining_pool_enabled
+		  
+		}else if (m_mining_pool_found_nonce != 0)
 		{
-		  // found the gold!
-		  h = m_mining_pool_hash;
+		  // Found the gold! TODO check template_no matches m_template_no
+		  b.nonce = m_mining_pool_nonce;
+		  
+		  // Go on do the computing and check_hash, just like normal solo mining
 		  
 		}else 
 		{
           LOG_PRINT_L2("Wait for mining pool submission of nonce");
           epee::misc_utils::sleep_no_w(1000);
+          continue; // loop m_is_mining_pool_enabled
 		}
 	  }else 
 	  {
-	    // Normal mining flow
+	    // Normal mining flow, set the nonce
         b.nonce = nonce;
-		
-		m_mining_pool_block_hashing_blob = get_block_hashing_blob(b);
-		std::cout << "Solo mining, nonce:" << nonce << " blob:" << string_encoding::base64_encode((unsigned char*)m_mining_pool_block_hashing_blob.c_str(), m_mining_pool_block_hashing_blob.length()) << ENDL;
-		
-        get_block_longhash(b, h, height);
       }
+		
+	  m_mining_pool_block_hashing_blob = get_block_hashing_blob(b);
+	  std::cout << "[miner.cpp] nonce:" << nonce << " blob:" << string_encoding::base64_encode((unsigned char*)m_mining_pool_block_hashing_blob.c_str(), m_mining_pool_block_hashing_blob.length()) << ENDL;
+	
+      get_block_longhash(b, h, height);
 	  
       if(check_hash(h, local_diff))
       {
@@ -555,7 +571,10 @@ namespace cryptonote
             epee::serialization::store_t_to_json_file(m_config, m_config_folder_path + "/" + MINER_CONFIG_FILE_NAME);
         }
       }
+	  
+	  // Increment the nonce by number of active threads
       nonce+=m_threads_total;
+	  
       ++m_hashes;
     }
     slow_hash_free_state();

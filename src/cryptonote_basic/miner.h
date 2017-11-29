@@ -179,11 +179,11 @@ namespace cryptonote
     bool m_is_mining_pool_enabled;
 	blobdata m_mining_pool_block_hashing_blob;
     epee::critical_section m_mining_pool_nonce_lock;
-	crypto::hash m_mining_pool_hash;
+	uint32_t m_mining_pool_found_nonce;
 	uint32_t m_mining_pool_nonce;
 	uint32_t m_mining_pool_template_no;
 	
   public: 
-	bool set_mining_pool_nonce(uint32_t template_no, uint32_t nonce, crypto::hash hash);
+	bool set_mining_pool_nonce(uint32_t template_no, uint32_t nonce);
   };
 }

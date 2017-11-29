@@ -1094,12 +1094,10 @@ namespace cryptonote
     {
 	  uint32_t template_no;
 	  uint32_t nonce;
-	  std::string hash;
 	  
       BEGIN_KV_SERIALIZE_MAP()
 	    KV_SERIALIZE(template_no)
 	    KV_SERIALIZE(nonce)
-	    KV_SERIALIZE(hash)
       END_KV_SERIALIZE_MAP()
     };
   
