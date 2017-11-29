@@ -42,6 +42,9 @@
 #include "string_coding.h"
 #include "storages/portable_storage_template_helper.h"
 #include "boost/logic/tribool.hpp"
+#include <boost/asio.hpp>
+#include <boost/array.hpp>
+#include <iostream>
 
 #ifdef __APPLE__
   #include <sys/times.h>
@@ -95,12 +98,12 @@ namespace cryptonote
     m_do_mining(false),
     m_current_hash_rate(0),
     m_is_background_mining_enabled(false),
+	m_is_mining_pool_enabled(false),
     m_min_idle_seconds(BACKGROUND_MINING_DEFAULT_MIN_IDLE_INTERVAL_IN_SECONDS),
     m_idle_threshold(BACKGROUND_MINING_DEFAULT_IDLE_THRESHOLD_PERCENTAGE),
     m_mining_target(BACKGROUND_MINING_DEFAULT_MINING_TARGET_PERCENTAGE),
     m_miner_extra_sleep(BACKGROUND_MINING_DEFAULT_MINER_EXTRA_SLEEP_MILLIS)
   {
-
   }
   //-----------------------------------------------------------------------------------------------------
   miner::~miner()
@@ -410,6 +413,15 @@ namespace cryptonote
       MDEBUG("MINING RESUMED");
   }
   //-----------------------------------------------------------------------------------------------------
+  bool miner::set_mining_pool_nonce(uint32_t template_no, uint32_t nonce, crypto::hash hash)
+  {
+    CRITICAL_REGION_LOCAL(m_mining_pool_nonce_lock);
+	m_mining_pool_hash = hash;
+	m_mining_pool_nonce = nonce;
+	m_mining_pool_template_no = template_no;
+	return true;
+  }
+  //-----------------------------------------------------------------------------------------------------
   bool miner::worker_thread()
   {
     uint32_t th_local_index = boost::interprocess::ipcdetail::atomic_inc32(&m_thread_index);
@@ -451,6 +463,9 @@ namespace cryptonote
         CRITICAL_REGION_END();
         local_template_ver = m_template_no;
         nonce = m_starter_nonce + th_local_index;
+		
+		// Resend the blob to mining pool
+		m_mining_pool_block_hashing_blob = "";
       }
 
       if(!local_template_ver)//no any set_block_template call
@@ -460,10 +475,71 @@ namespace cryptonote
         continue;
       }
 
-      b.nonce = nonce;
-      crypto::hash h;
-      get_block_longhash(b, h, height);
-
+	  crypto::hash h;
+	  
+      if (m_is_mining_pool_enabled)
+	  {
+	    if (m_mining_pool_block_hashing_blob == "")
+		{
+		  // create blob for mining pool
+		  b.nonce = 0;
+		  m_mining_pool_block_hashing_blob = get_block_hashing_blob(b);
+		  m_mining_pool_hash.data[0] = 0;
+		  
+		  std::cout << "Send blob:" << m_mining_pool_block_hashing_blob << ENDL;
+		  
+		  // send via IPC over to Node Agent
+          rapidjson::Document json;
+		  json.SetObject();
+		  rapidjson::Value value(rapidjson::kStringType);
+		  
+		  value.SetString("node", sizeof("node"));
+		  json.AddMember("obj", value, json.GetAllocator());
+		  
+		  value.SetString("new_template", sizeof("new_template"));
+		  json.AddMember("act", value, json.GetAllocator());
+		  
+		  value.SetString(m_mining_pool_block_hashing_blob.c_str(), m_mining_pool_block_hashing_blob.length());
+		  json.AddMember("blob", value, json.GetAllocator());
+		  
+          // Serialize the JSON object
+          rapidjson::StringBuffer buffer;
+          rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+          json.Accept(writer);
+		  
+	  	  boost::asio::io_service ios;
+	      boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 3000);
+	      boost::asio::ip::tcp::socket socket(ios);
+	  	  socket.connect(endpoint);
+		  
+	  	  boost::array<char, 10000> buf;
+		  std::string stringified = buffer.GetString();
+	      std::copy(stringified.begin(), stringified.end(), buf.begin());
+	  	  boost::system::error_code error;
+	  	  socket.write_some(boost::asio::buffer(buf, stringified.size()), error);
+	      socket.close();
+		  
+		}else if (m_mining_pool_hash.data[0] != 0)
+		{
+		  // found the gold!
+		  h = m_mining_pool_hash;
+		  
+		}else 
+		{
+          LOG_PRINT_L2("Wait for mining pool submission of nonce");
+          epee::misc_utils::sleep_no_w(1000);
+		}
+	  }else 
+	  {
+	    // Normal mining flow
+        b.nonce = nonce;
+		
+		m_mining_pool_block_hashing_blob = get_block_hashing_blob(b);
+		std::cout << "Solo mining, nonce:" << nonce << " blob:" << string_encoding::base64_encode((unsigned char*)m_mining_pool_block_hashing_blob.c_str(), m_mining_pool_block_hashing_blob.length()) << ENDL;
+		
+        get_block_longhash(b, h, height);
+      }
+	  
       if(check_hash(h, local_diff))
       {
         //we lucky!

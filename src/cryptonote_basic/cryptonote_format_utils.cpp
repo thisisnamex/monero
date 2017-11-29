@@ -32,11 +32,13 @@
 using namespace epee;
 
 #include <atomic>
+#include <iostream>
 #include "cryptonote_format_utils.h"
 #include "cryptonote_config.h"
 #include "crypto/crypto.h"
 #include "crypto/hash.h"
 #include "ringct/rctSigs.h"
+#include "string_coding.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "cn"
@@ -825,6 +827,10 @@ namespace cryptonote
     crypto::hash tree_root_hash = get_tx_tree_hash(b);
     blob.append(reinterpret_cast<const char*>(&tree_root_hash), sizeof(tree_root_hash));
     blob.append(tools::get_varint_data(b.tx_hashes.size()+1));
+    
+    // Dump the blob for developing Core Worker miner
+    std::cout << "get_block_hashing_blob nonce:" << b.nonce << " blob:" << string_encoding::base64_encode((unsigned char*)blob.c_str(),blob.length()) << ENDL;
+    
     return blob;
   }
   //---------------------------------------------------------------

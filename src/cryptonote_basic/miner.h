@@ -45,6 +45,10 @@
 #include <time.h>
 #endif
 
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
+
 namespace cryptonote
 {
 
@@ -169,5 +173,17 @@ namespace cryptonote
     static bool get_process_time(uint64_t& total_time);
     static uint8_t get_percent_of_total(uint64_t some_time, uint64_t total_time);
     static boost::logic::tribool on_battery_power();
+	
+    // mining pool related ..
+	
+    bool m_is_mining_pool_enabled;
+	blobdata m_mining_pool_block_hashing_blob;
+    epee::critical_section m_mining_pool_nonce_lock;
+	crypto::hash m_mining_pool_hash;
+	uint32_t m_mining_pool_nonce;
+	uint32_t m_mining_pool_template_no;
+	
+  public: 
+	bool set_mining_pool_nonce(uint32_t template_no, uint32_t nonce, crypto::hash hash);
   };
 }
