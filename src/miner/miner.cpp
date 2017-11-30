@@ -87,20 +87,24 @@ int main(int argc, char* argv[])
   uint32_t template_no = boost::lexical_cast<uint32_t>(argv[1]);
   uint32_t nonce_from = boost::lexical_cast<uint32_t>(argv[2]);
   uint32_t nonce_to = boost::lexical_cast<uint32_t>(argv[3]);
-  uint64_t difficulty = boost::lexical_cast<uint64_t>(argv[4]);
+  
+  // accepted POW for share
+  uint64_t pool_difficulty = boost::lexical_cast<uint64_t>(argv[4]);
+  // difficulty for coin reward
+  uint64_t target_difficulty = boost::lexical_cast<uint64_t>(argv[5]);
   
   // blob is a result of get_block_hashing_blob(const block& b) call as defined in 
   // cryptonote_basic/cryptonote_format_utils.cpp
   // blob is std::string
   
-  if (sizeof(argv[5]) >= 512)
+  if (sizeof(argv[6]) >= 512)
   {
     std::cerr << "Fatal, malformed blob received!" << ENDL;
     return 0;
   }
   
   char blob[512];
-  std::string blob_bin = string_encoding::base64_decode(argv[5]);
+  std::string blob_bin = string_encoding::base64_decode(argv[6]);
   memcpy(blob, blob_bin.c_str(), blob_bin.length());
   
   if (DEBUG_MINER)
@@ -112,6 +116,8 @@ int main(int argc, char* argv[])
   
   crypto::hash hash_result;
   int blob_length = strlen(blob);
+  
+  int pool_difficulty_solution_count = 0;
   
   for (uint32_t nonce = nonce_from; nonce < nonce_to; nonce++)
   {
@@ -132,7 +138,23 @@ int main(int argc, char* argv[])
 	  hexdump(hash_result.data, 32);
     }
 	
-	if(cryptonote::check_hash(hash_result, difficulty))
+	if(cryptonote::check_hash(hash_result, pool_difficulty))
+    {
+      if (DEBUG_MINER)
+      {
+        std::cerr << "Found pool_difficulty nonce:" << nonce << " hash:" << hash_result << ENDL;
+      }
+      
+      if (DEBUG_MINER) {
+	    std::cout << nonce << ENDL;
+	  }
+	  
+	  pool_difficulty_solution_count ++;
+	  
+	  continue;
+	}
+	
+	if(cryptonote::check_hash(hash_result, target_difficulty))
     {
       if (DEBUG_MINER)
       {
@@ -144,7 +166,7 @@ int main(int argc, char* argv[])
 	    continue;
 	  }
       
-      // Send POW via IPC over to Core Manager, to be forwarded to Node Agent and P2P Node
+      // Foudn gold! Send  IPC over to Core Manager, to be forwarded to Node Agent and P2P Node
       rapidjson::Document json;
       json.SetObject();
       rapidjson::Value value_str(rapidjson::kStringType);
@@ -153,7 +175,7 @@ int main(int argc, char* argv[])
       value_str.SetString("core", sizeof("core"));
       json.AddMember("obj", value_str, json.GetAllocator());
     
-      value_str.SetString("pow", sizeof("pow"));
+      value_str.SetString("eureka", sizeof("eureka"));
       json.AddMember("act", value_str, json.GetAllocator());
 
       value_num.SetInt(template_no);
@@ -199,6 +221,9 @@ int main(int argc, char* argv[])
   
   value_num.SetInt(nonce_from);
   json.AddMember("nonce_from", value_num, json.GetAllocator());
+  
+  value_num.SetInt(pool_difficulty_solution_count);
+  json.AddMember("count", value_num, json.GetAllocator());
 
   // Serialize the JSON object
   rapidjson::StringBuffer buffer;
