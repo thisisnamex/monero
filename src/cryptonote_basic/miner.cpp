@@ -143,11 +143,14 @@ namespace cryptonote
       extra_nonce = m_extra_messages[m_config.current_extra_message_index];
     }
 
-    if(!m_phandler->get_block_template(bl, m_mine_address, di, height, expected_reward, extra_nonce))
+    if(!m_phandler->get_block_template(bl, m_mine_address, di, height, m_height, expected_reward, extra_nonce))
     {
-      LOG_ERROR("Failed to get_block_template(), stopping mining");
+      LOG_ERROR("request_block_template() block height the same: " << m_height);
       return false;
-    }
+    }else
+	{
+      LOG_ERROR("request_block_template() found new block, of height: " << height);
+	}
     set_block_template(bl, di, height);
     return true;
   }
