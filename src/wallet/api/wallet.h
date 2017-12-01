@@ -31,7 +31,7 @@
 #ifndef WALLET_IMPL_H
 #define WALLET_IMPL_H
 
-#include "wallet/wallet2_api.h"
+#include "wallet/api/wallet2_api.h"
 #include "wallet/wallet2.h"
 
 #include <string>
@@ -137,6 +137,11 @@ public:
     virtual bool setUserNote(const std::string &txid, const std::string &note);
     virtual std::string getUserNote(const std::string &txid) const;
     virtual std::string getTxKey(const std::string &txid) const;
+    virtual bool checkTxKey(const std::string &txid, std::string tx_key, const std::string &address, uint64_t &received, bool &in_pool, uint64_t &confirmations);
+    virtual std::string getTxProof(const std::string &txid, const std::string &address, const std::string &message) const;
+    virtual bool checkTxProof(const std::string &txid, const std::string &address, const std::string &message, const std::string &signature, bool &good, uint64_t &received, bool &in_pool, uint64_t &confirmations);
+    virtual std::string getSpendProof(const std::string &txid, const std::string &message) const;
+    virtual bool checkSpendProof(const std::string &txid, const std::string &message, const std::string &signature, bool &good) const;
     virtual std::string signMessage(const std::string &message);
     virtual bool verifySignedMessage(const std::string &message, const std::string &address, const std::string &signature) const;
     virtual void startRefresh();
