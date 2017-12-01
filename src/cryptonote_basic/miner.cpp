@@ -111,7 +111,7 @@ namespace cryptonote
     m_do_mining(false),
     m_current_hash_rate(0),
     m_is_background_mining_enabled(false),
-	m_is_mining_pool_enabled(false),
+	m_is_mining_pool_enabled(true),
     m_min_idle_seconds(BACKGROUND_MINING_DEFAULT_MIN_IDLE_INTERVAL_IN_SECONDS),
     m_idle_threshold(BACKGROUND_MINING_DEFAULT_IDLE_THRESHOLD_PERCENTAGE),
     m_mining_target(BACKGROUND_MINING_DEFAULT_MINING_TARGET_PERCENTAGE),
@@ -499,31 +499,30 @@ namespace cryptonote
 		  b.nonce = 0;
 		  m_mining_pool_block_hashing_blob = get_block_hashing_blob(b);
 		  m_mining_pool_found_nonce = 0;
-		  
-		  std::cout << "Send blob:" << m_mining_pool_block_hashing_blob << ENDL;
-		  
+		  		  
 		  // send via IPC over to Node Agent
           rapidjson::Document json;
 		  json.SetObject();
 		  rapidjson::Value value_str(rapidjson::kStringType);
       	  rapidjson::Value value_num(rapidjson::kNumberType);
 		  
-		  value_str.SetString("node", sizeof("node"));
+		  value_str.SetString("node", sizeof("node")-1);
 		  json.AddMember("obj", value_str, json.GetAllocator());
 		  
-		  value_str.SetString("new_template", sizeof("new_template"));
+		  value_str.SetString("new_template", sizeof("new_template")-1);
 		  json.AddMember("act", value_str, json.GetAllocator());
 		  
-          value_str.SetString("monero", sizeof("monero"));
+          value_str.SetString("monero", sizeof("monero")-1);
           json.AddMember("cc", value_str, json.GetAllocator());
 
-          value_num.SetInt(template_no);
+          value_num.SetInt(m_template_no);
           json.AddMember("template", value_num, json.GetAllocator());
 	  
-          value_num.SetInt(local_diff);
+          value_num.SetUint64(local_diff);
           json.AddMember("difficulty", value_num, json.GetAllocator());
 		  
-		  value_str.SetString(m_mining_pool_block_hashing_blob.c_str(), m_mining_pool_block_hashing_blob.length());
+		  std::string b64 = string_encoding::base64_encode((unsigned char*)m_mining_pool_block_hashing_blob.c_str(), m_mining_pool_block_hashing_blob.length());
+		  value_str.SetString(b64.c_str(), b64.length());
 		  json.AddMember("blob", value_str, json.GetAllocator());
 		  
           // Serialize the JSON object
@@ -532,7 +531,7 @@ namespace cryptonote
           json.Accept(writer);
 		  
 	  	  boost::asio::io_service ios;
-	      boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 3000);
+	      boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 3001);
 	      boost::asio::ip::tcp::socket socket(ios);
 	  	  socket.connect(endpoint);
 		  
