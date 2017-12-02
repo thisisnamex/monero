@@ -163,7 +163,6 @@ int main(int argc, char* argv[])
       
       if (DEBUG_MINER) {
 	    std::cout << nonce << ENDL;
-	    continue;
 	  }
       
       // Foudn gold! Send  IPC over to Core Manager, to be forwarded to Node Agent and P2P Node
@@ -204,7 +203,7 @@ int main(int argc, char* argv[])
   }
   
   if (DEBUG_MINER) {
-  	return 0;
+    std::cerr << "Done assigned work." << ENDL;
   }
   
   // Before quit, send notification to Core Manager
@@ -213,10 +212,10 @@ int main(int argc, char* argv[])
   rapidjson::Value value_str(rapidjson::kStringType);
   rapidjson::Value value_num(rapidjson::kNumberType);
   
-  value_str.SetString("core", sizeof("core"));
+  value_str.SetString("core", strlen("core"));
   json.AddMember("obj", value_str, json.GetAllocator());
 
-  value_str.SetString("done", sizeof("done"));
+  value_str.SetString("done", strlen("done"));
   json.AddMember("act", value_str, json.GetAllocator());
   
   value_num.SetInt(nonce_from);
