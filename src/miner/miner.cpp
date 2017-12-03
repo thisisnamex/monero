@@ -171,10 +171,10 @@ int main(int argc, char* argv[])
       rapidjson::Value value_str(rapidjson::kStringType);
       rapidjson::Value value_num(rapidjson::kNumberType);
       
-      value_str.SetString("core", sizeof("core"));
+      value_str.SetString("core", strlen("core"));
       json.AddMember("obj", value_str, json.GetAllocator());
     
-      value_str.SetString("eureka", sizeof("eureka"));
+      value_str.SetString("eureka", strlen("eureka"));
       json.AddMember("act", value_str, json.GetAllocator());
 
       value_num.SetInt(template_no);
