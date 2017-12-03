@@ -434,7 +434,7 @@ static void emplace_or_replace(std::unordered_multimap<crypto::hash, tools::wall
   auto range = container.equal_range(key);
   for (auto i = range.first; i != range.second; ++i)
   {
-    if (i->second.m_pd.m_tx_hash == pd.m_pd.m_tx_hash)
+    if (i->second.m_pd.m_tx_hash == pd.m_pd.m_tx_hash && i->second.m_pd.m_subaddr_index == pd.m_pd.m_subaddr_index)
     {
       i->second = pd;
       return;
@@ -886,7 +886,12 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
     tools::threadpool::waiter waiter;
     const cryptonote::account_keys& keys = m_account.get_keys();
     crypto::key_derivation derivation;
-    generate_key_derivation(tx_pub_key, keys.m_view_secret_key, derivation);
+    if (!generate_key_derivation(tx_pub_key, keys.m_view_secret_key, derivation))
+    {
+      MWARNING("Failed to generate key derivation from tx pubkey, skipping");
+      static_assert(sizeof(derivation) == sizeof(rct::key), "Mismatched sizes of key_derivation and rct::key");
+      memcpy(&derivation, rct::identity().bytes, sizeof(derivation));
+    }
 
     // additional tx pubkeys and derivations for multi-destination transfers involving one or more subaddresses
     std::vector<crypto::public_key> additional_tx_pub_keys = get_additional_tx_pub_keys_from_extra(tx);
@@ -894,7 +899,11 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
     for (size_t i = 0; i < additional_tx_pub_keys.size(); ++i)
     {
       additional_derivations.push_back({});
-      generate_key_derivation(additional_tx_pub_keys[i], keys.m_view_secret_key, additional_derivations.back());
+      if (!generate_key_derivation(additional_tx_pub_keys[i], keys.m_view_secret_key, additional_derivations.back()))
+      {
+        MWARNING("Failed to generate key derivation from tx pubkey, skipping");
+        additional_derivations.pop_back();
+      }
     }
 
     if (miner_tx && m_refresh_type == RefreshNoCoinbase)
@@ -2467,26 +2476,7 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const std::stri
 
   // try asking the daemon first
   if(m_refresh_from_block_height == 0 && !recover){
-    std::string err;
-    uint64_t height = 0;
-
-    // we get the max of approximated height and known height
-    // approximated height is the least of daemon target height
-    // (the max of what the other daemons are claiming is their
-    // height) and the theoretical height based on the local
-    // clock. This will be wrong only if both the local clock
-    // is bad *and* a peer daemon claims a highest height than
-    // the real chain.
-    // known height is the height the local daemon is currently
-    // synced to, it will be lower than the real chain height if
-    // the daemon is currently syncing.
-    height = get_approximate_blockchain_height();
-    uint64_t target_height = get_daemon_blockchain_target_height(err);
-    if (err.empty() && target_height < height)
-      height = target_height;
-    uint64_t local_height = get_daemon_blockchain_height(err);
-    if (err.empty() && local_height > height)
-      height = local_height;
+    uint64_t height = estimate_blockchain_height();
     m_refresh_from_block_height = height >= blocks_per_month ? height - blocks_per_month : 0;
   }
 
@@ -2504,6 +2494,38 @@ crypto::secret_key wallet2::generate(const std::string& wallet_, const std::stri
   store();
   return retval;
 }
+
+ uint64_t wallet2::estimate_blockchain_height()
+ {
+   // -1 month for fluctuations in block time and machine date/time setup.
+   // avg seconds per block
+   const int seconds_per_block = DIFFICULTY_TARGET_V2;
+   // ~num blocks per month
+   const uint64_t blocks_per_month = 60*60*24*30/seconds_per_block;
+
+   // try asking the daemon first
+   std::string err;
+   uint64_t height = 0;
+
+   // we get the max of approximated height and known height
+   // approximated height is the least of daemon target height
+   // (the max of what the other daemons are claiming is their
+   // height) and the theoretical height based on the local
+   // clock. This will be wrong only if both the local clock
+   // is bad *and* a peer daemon claims a highest height than
+   // the real chain.
+   // known height is the height the local daemon is currently
+   // synced to, it will be lower than the real chain height if
+   // the daemon is currently syncing.
+   height = get_approximate_blockchain_height();
+   uint64_t target_height = get_daemon_blockchain_target_height(err);
+   if (err.empty() && target_height < height)
+     height = target_height;
+   uint64_t local_height = get_daemon_blockchain_height(err);
+   if (err.empty() && local_height > height)
+     height = local_height;
+   return height;
+ }
 
 /*!
 * \brief Creates a watch only wallet from a public address and a view secret key.

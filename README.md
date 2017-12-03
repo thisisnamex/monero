@@ -8,4 +8,3 @@ This forked repository is part of a mining pool system codebase built by MONGOOS
 
 
 Our mining pool system is built with realtime websocket based Creativearmy App Framework: [https://github.com/creativearmy/caf](https://github.com/creativearmy/caf)![alt text](http://www.hehuo168.com/hehuo20.png "Creative Army Productions")
-

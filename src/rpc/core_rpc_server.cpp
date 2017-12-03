@@ -68,7 +68,9 @@ namespace cryptonote
   void core_rpc_server::init_options(boost::program_options::options_description& desc)
   {
     command_line::add_arg(desc, arg_rpc_bind_port);
+    command_line::add_arg(desc, arg_rpc_restricted_bind_port);
     command_line::add_arg(desc, arg_testnet_rpc_bind_port);
+    command_line::add_arg(desc, arg_testnet_rpc_restricted_bind_port);
     command_line::add_arg(desc, arg_restricted_rpc);
     cryptonote::rpc_args::init_options(desc);
   }
@@ -83,21 +85,21 @@ namespace cryptonote
   //------------------------------------------------------------------------------------------------------------------------------
   bool core_rpc_server::init(
       const boost::program_options::variables_map& vm
+      , const bool restricted
+      , const bool testnet
+      , const std::string& port
     )
   {
-    m_testnet = command_line::get_arg(vm, cryptonote::arg_testnet_on);
+    m_restricted = restricted;
+    m_testnet = testnet;
     m_net_server.set_threads_prefix("RPC");
-
-    auto p2p_bind_arg = m_testnet ? arg_testnet_rpc_bind_port : arg_rpc_bind_port;
 
     auto rpc_config = cryptonote::rpc_args::process(vm);
     if (!rpc_config)
       return false;
 
-    m_restricted = command_line::get_arg(vm, arg_restricted_rpc);
-
     boost::optional<epee::net_utils::http::login> http_login{};
-    std::string port = command_line::get_arg(vm, p2p_bind_arg);
+
     if (rpc_config->login)
       http_login.emplace(std::move(rpc_config->login->username), std::move(rpc_config->login->password).password());
 
@@ -1761,12 +1763,13 @@ namespace cryptonote
       res.peers.push_back({c});
     const cryptonote::block_queue &block_queue = m_p2p.get_payload_object().get_block_queue();
     block_queue.foreach([&](const cryptonote::block_queue::span &span) {
+      const std::string span_connection_id = epee::string_tools::pod_to_hex(span.connection_id);
       uint32_t speed = (uint32_t)(100.0f * block_queue.get_speed(span.connection_id) + 0.5f);
       std::string address = "";
       for (const auto &c: m_p2p.get_payload_object().get_connections())
-        if (c.connection_id == span.connection_id)
+        if (c.connection_id == span_connection_id)
           address = c.address;
-      res.spans.push_back({span.start_block_height, span.nblocks, span.connection_id, (uint32_t)(span.rate + 0.5f), speed, span.size, address});
+      res.spans.push_back({span.start_block_height, span.nblocks, span_connection_id, (uint32_t)(span.rate + 0.5f), speed, span.size, address});
       return true;
     });
 
@@ -1796,10 +1799,22 @@ namespace cryptonote
     , std::to_string(config::RPC_DEFAULT_PORT)
     };
 
+  const command_line::arg_descriptor<std::string> core_rpc_server::arg_rpc_restricted_bind_port = {
+      "rpc-restricted-bind-port"
+    , "Port for restricted RPC server"
+    , ""
+    };
+
   const command_line::arg_descriptor<std::string> core_rpc_server::arg_testnet_rpc_bind_port = {
       "testnet-rpc-bind-port"
     , "Port for testnet RPC server"
     , std::to_string(config::testnet::RPC_DEFAULT_PORT)
+    };
+
+  const command_line::arg_descriptor<std::string> core_rpc_server::arg_testnet_rpc_restricted_bind_port = {
+      "testnet-rpc-restricted-bind-port"
+    , "Port for testnet restricted RPC server"
+    , ""
     };
 
   const command_line::arg_descriptor<bool> core_rpc_server::arg_restricted_rpc = {
