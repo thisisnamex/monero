@@ -150,7 +150,8 @@ int main(int argc, char* argv[])
 	  }
 	  
 	  pool_difficulty_solution_count ++;
-	}
+	  
+	} else continue;
 	
 	if(cryptonote::check_hash(hash_result, target_difficulty))
     {
