@@ -75,7 +75,7 @@ using namespace epee;
 #define CORE_MANAGER_IP "127.0.0.1"
 #define CORE_MANAGER_PORT 3000
 
-#define DEBUG_MINER true
+#define DEBUG_MINER false
 
 void hexdump(void *pAddressIn, long  lSize);
 void blob_set_nonce(char *blob, uint32_t nonce);
@@ -115,7 +115,7 @@ int main(int argc, char* argv[])
   }
   
   crypto::hash hash_result;
-  int blob_length = strlen(blob);
+  int blob_length = blob_bin.length();
   
   int pool_difficulty_solution_count = 0;
   
