@@ -179,7 +179,7 @@ int main(int argc, char* argv[])
       value_num.SetInt(template_no);
       json.AddMember("template", value_num, json.GetAllocator());
 
-      value_num.SetInt(nonce);
+      value_num.SetUint(nonce);
       json.AddMember("nonce", value_num, json.GetAllocator());
     
       // Serialize the JSON object
@@ -217,7 +217,7 @@ int main(int argc, char* argv[])
   value_str.SetString("done", strlen("done"));
   json.AddMember("act", value_str, json.GetAllocator());
   
-  value_num.SetInt(nonce_from);
+  value_num.SetUint(nonce_from);
   json.AddMember("nonce_from", value_num, json.GetAllocator());
   
   value_num.SetInt(pool_difficulty_solution_count);
