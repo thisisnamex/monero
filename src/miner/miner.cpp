@@ -40,9 +40,10 @@
   // Send nounce for each solution found
   {
     obj: core
-    act: pow
-    template: template number of this POW
+    act: nonce
+    work: work id of this share
     nonce: nonce for the solution
+	eureka: if the nonce meeets the target difficulty check
   }
   
   // Send notification when done searching through all the nonces
@@ -75,16 +76,16 @@ using namespace epee;
 #define CORE_MANAGER_IP "127.0.0.1"
 #define CORE_MANAGER_PORT 3000
 
-#define DEBUG_MINER true
+#define DEBUG_MINER false
 
 void hexdump(void *pAddressIn, long  lSize);
 void blob_set_nonce(char *blob, uint32_t nonce);
 
 int main(int argc, char* argv[])
 { 
-  // argv: template_no, nonce_from, nonce_to(excluding), difficulty, blobdata
+  // argv: work_id, nonce_from, nonce_to(excluding), difficulty, blobdata
   // call: cn_slow_hash to compute the hash and send POW via IPC to Core Manager
-  uint32_t template_no = boost::lexical_cast<uint32_t>(argv[1]);
+  char* work_id = argv[1];
   uint32_t nonce_from = boost::lexical_cast<uint32_t>(argv[2]);
   uint32_t nonce_to = boost::lexical_cast<uint32_t>(argv[3]);
   
@@ -115,7 +116,7 @@ int main(int argc, char* argv[])
   }
   
   crypto::hash hash_result;
-  int blob_length = strlen(blob);
+  int blob_length = blob_bin.length();
   
   int pool_difficulty_solution_count = 0;
   
@@ -124,82 +125,81 @@ int main(int argc, char* argv[])
     // Set nounce in blob
 	blob_set_nonce(blob, nonce);
 	
-    if (DEBUG_MINER)
-    {
-      std::cerr << "Testing blob:" << ENDL;
-      hexdump(blob, blob_bin.length());
-    }
-    
     crypto::cn_slow_hash(blob, blob_length, hash_result);
 		
     if (DEBUG_MINER)
     {
+      std::cerr << "Testing blob:" << ENDL;
+      hexdump(blob, blob_bin.length());
+	  
       std::cerr << "hash_result:" << ENDL;
 	  hexdump(hash_result.data, 32);
     }
+	
+	// nonce works for target_difficulty
+	bool target = 0;
 	
 	if(cryptonote::check_hash(hash_result, pool_difficulty))
     {
       if (DEBUG_MINER)
       {
         std::cerr << "Found pool_difficulty nonce:" << nonce << " hash:" << hash_result << ENDL;
-      }
-      
-      if (DEBUG_MINER) {
 	    std::cout << nonce << ENDL;
-	  }
+      }
 	  
 	  pool_difficulty_solution_count ++;
 	  
-	  continue;
-	}
+	} else continue;
 	
 	if(cryptonote::check_hash(hash_result, target_difficulty))
     {
       if (DEBUG_MINER)
       {
-        std::cerr << "Found nonce:" << nonce << " hash:" << hash_result << ENDL;
-      }
-      
-      if (DEBUG_MINER) {
+        std::cerr << "Found target_difficulty nonce:" << nonce << " hash:" << hash_result << ENDL;
 	    std::cout << nonce << ENDL;
-	  }
-      
-      // Foudn gold! Send  IPC over to Core Manager, to be forwarded to Node Agent and P2P Node
-      rapidjson::Document json;
-      json.SetObject();
-      rapidjson::Value value_str(rapidjson::kStringType);
-      rapidjson::Value value_num(rapidjson::kNumberType);
-      
-      value_str.SetString("core", sizeof("core"));
-      json.AddMember("obj", value_str, json.GetAllocator());
+      }
+	  
+	  target = 1;
+    }
+	
+    // Found nonce! Send  IPC over to Core Manager, to be forwarded to Node Agent and P2P Node if eureka set
+    rapidjson::Document json;
+    json.SetObject();
+    rapidjson::Value value_str(rapidjson::kStringType);
+    rapidjson::Value value_num(rapidjson::kNumberType);
     
-      value_str.SetString("eureka", sizeof("eureka"));
-      json.AddMember("act", value_str, json.GetAllocator());
+    value_str.SetString("core", strlen("core"));
+    json.AddMember("obj", value_str, json.GetAllocator());
+    
+    value_str.SetString("nonce", strlen("nonce"));
+    json.AddMember("act", value_str, json.GetAllocator());
 
-      value_num.SetInt(template_no);
-      json.AddMember("template", value_num, json.GetAllocator());
+    value_str.SetString(work_id, strlen(work_id));
+    json.AddMember("work", value_str, json.GetAllocator());
 
-      value_num.SetInt(nonce);
-      json.AddMember("nonce", value_num, json.GetAllocator());
+    value_num.SetUint(nonce);
+    json.AddMember("nonce", value_num, json.GetAllocator());
+	
+    value_num.SetUint(1);
+	if (!target) value_num.SetUint(0);
+    json.AddMember("eureka", value_num, json.GetAllocator());
     
-      // Serialize the JSON object
-      rapidjson::StringBuffer buffer;
-      rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-      json.Accept(writer);
+    // Serialize the JSON object
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    json.Accept(writer);
     
-      boost::asio::io_service ios;
-      boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string(CORE_MANAGER_IP), CORE_MANAGER_PORT);
-      boost::asio::ip::tcp::socket socket(ios);
-      socket.connect(endpoint);
+    boost::asio::io_service ios;
+    boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::address::from_string(CORE_MANAGER_IP), CORE_MANAGER_PORT);
+    boost::asio::ip::tcp::socket socket(ios);
+    socket.connect(endpoint);
     
-      boost::array<char, 1000> buf;
-      std::string stringified = buffer.GetString();
-      std::copy(stringified.begin(), stringified.end(), buf.begin());
-      boost::system::error_code error;
-      socket.write_some(boost::asio::buffer(buf, stringified.size()), error);
-      socket.close();
-    }  
+    boost::array<char, 1000> buf;
+    std::string stringified = buffer.GetString();
+    std::copy(stringified.begin(), stringified.end(), buf.begin());
+    boost::system::error_code error;
+    socket.write_some(boost::asio::buffer(buf, stringified.size()), error);
+    socket.close();
   }
   
   if (DEBUG_MINER) {
@@ -218,7 +218,7 @@ int main(int argc, char* argv[])
   value_str.SetString("done", strlen("done"));
   json.AddMember("act", value_str, json.GetAllocator());
   
-  value_num.SetInt(nonce_from);
+  value_num.SetUint(nonce_from);
   json.AddMember("nonce_from", value_num, json.GetAllocator());
   
   value_num.SetInt(pool_difficulty_solution_count);

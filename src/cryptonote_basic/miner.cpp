@@ -585,7 +585,11 @@ namespace cryptonote
           if (!m_config_folder_path.empty())
             epee::serialization::store_t_to_json_file(m_config, m_config_folder_path + "/" + MINER_CONFIG_FILE_NAME);
         }
-      }
+      } else
+	  {
+	    // OK, check it off to avoid infinite loop
+		m_mining_pool_found_nonce = 0;
+	  }
 	  
 	  // Increment the nonce by number of active threads
       nonce+=m_threads_total;
